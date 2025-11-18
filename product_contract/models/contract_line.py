@@ -50,11 +50,12 @@ class ContractLine(models.Model):
                 )
 
     def _set_recurrence_field(self, field):
-        res = super()._set_recurrence_field(field)
+#        res = super()._set_recurrence_field(field)
         for record in self:
             if record.product_id.is_contract and field in record.product_id:
                 record[field] = record.product_id[field]
-        return res
+
+#        return res
 
     @api.depends(
         "contract_id.recurring_rule_type", "contract_id.line_recurrence", "product_id"
