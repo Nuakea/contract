@@ -30,6 +30,8 @@ class ContractLine(models.Model):
         auto_join=True,
         ondelete="cascade",
     )
+    # replace from abstract to add the store=True
+    partner_id = fields.Many2one(store=True)
     currency_id = fields.Many2one(related="contract_id.currency_id")
     create_invoice_visibility = fields.Boolean(
         compute="_compute_create_invoice_visibility"
@@ -66,6 +68,26 @@ class ContractLine(models.Model):
             recurring_interval,
             max_date_end=False,
         )
+
+    def _get_analytic_distribution_arguments(self):
+        self.ensure_one()
+        partner_categ_ids = self.contract_id.partner_id.category_id.ids
+        return {
+            "product_id": self.product_id.id,
+            "product_categ_id": self.product_id.categ_id.id,
+            "partner_id": self.contract_id.partner_id.id,
+            "partner_category_id": partner_categ_ids,
+            "company_id": self.company_id.id,
+        }
+
+    @api.depends("contract_id.partner_id", "product_id")
+    def _compute_analytic_distribution(self):
+        for line in self:
+            if not line.display_type:
+                distribution = line.env[
+                    "account.analytic.distribution.model"
+                ]._get_distribution(line._get_analytic_distribution_arguments())
+                line.analytic_distribution = distribution or line.analytic_distribution
 
     @api.constrains("recurring_next_date", "date_start")
     def _check_recurring_next_date_start_date(self):
@@ -260,6 +282,15 @@ class ContractLine(models.Model):
                     "last_date_invoiced": last_date_invoiced,
                 }
             )
+
+    def _can_be_invoiced(self, date_ref):
+        self.ensure_one()
+        return (
+            not self.is_canceled
+            and self.recurring_next_date
+            and self.recurring_next_date <= date_ref
+            and self.next_period_date_start
+        )
 
     @api.model
     def get_view(self, view_id=None, view_type="form", **options):
